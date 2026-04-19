@@ -4,7 +4,7 @@ Spec-driven and skill-assisted development experiments.
 
 ## Library desk (frontend)
 
-Browser-only catalog: add books, borrow copies, and return them. No database or API—state is held in memory for the current tab.
+Browser-only catalog: add books, borrow, return, **edit**, and **delete** rows. Data is saved in **`localStorage`** for this origin (no server). If several tabs are open, **last write wins** when each tab saves.
 
 ```bash
 cd app

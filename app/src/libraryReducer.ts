@@ -17,6 +17,14 @@ export type LibraryAction =
   | { type: 'ADD_BOOK'; title: string; author: string; copies: number }
   | { type: 'BORROW'; bookId: string }
   | { type: 'RETURN'; bookId: string }
+  | {
+      type: 'EDIT_BOOK'
+      bookId: string
+      title: string
+      author: string
+      totalCopies: number
+    }
+  | { type: 'DELETE_BOOK'; bookId: string }
   | { type: 'CLEAR_FLASH' }
 
 function newId(): string {
@@ -63,6 +71,72 @@ export function libraryReducer(
       return {
         books: [book, ...state.books],
         flash: { variant: 'success', text: `Added “${title}”.` },
+      }
+    }
+
+    case 'EDIT_BOOK': {
+      const idx = state.books.findIndex((b) => b.id === action.bookId)
+      if (idx === -1) {
+        return {
+          ...state,
+          flash: { variant: 'error', text: 'Book not found.' },
+        }
+      }
+      const book = state.books[idx]
+      const title = action.title.trim()
+      const author = action.author.trim()
+      const totalCopies = Math.floor(action.totalCopies)
+
+      if (!title || !author) {
+        return {
+          ...state,
+          flash: { variant: 'error', text: 'Title and author are required.' },
+        }
+      }
+      if (!Number.isFinite(totalCopies) || totalCopies < 1) {
+        return {
+          ...state,
+          flash: {
+            variant: 'error',
+            text: 'Total copies must be at least 1.',
+          },
+        }
+      }
+      if (totalCopies < book.borrowed) {
+        return {
+          ...state,
+          flash: {
+            variant: 'error',
+            text: `Total copies cannot be less than borrowed (${book.borrowed} out).`,
+          },
+        }
+      }
+
+      const next = [...state.books]
+      next[idx] = {
+        ...book,
+        title,
+        author,
+        totalCopies,
+      }
+      return {
+        books: next,
+        flash: { variant: 'success', text: `Updated “${title}”.` },
+      }
+    }
+
+    case 'DELETE_BOOK': {
+      const idx = state.books.findIndex((b) => b.id === action.bookId)
+      if (idx === -1) {
+        return {
+          ...state,
+          flash: { variant: 'error', text: 'Book not found.' },
+        }
+      }
+      const book = state.books[idx]
+      return {
+        books: state.books.filter((b) => b.id !== action.bookId),
+        flash: { variant: 'success', text: `Removed “${book.title}”.` },
       }
     }
 
@@ -124,7 +198,6 @@ export function libraryReducer(
   }
 }
 
-export const initialLibraryState: LibraryState = {
-  books: [],
-  flash: null,
+export function createInitialState(books: Book[]): LibraryState {
+  return { books, flash: null }
 }

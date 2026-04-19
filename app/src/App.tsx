@@ -1,9 +1,10 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import {
-  initialLibraryState,
+  createInitialState,
   libraryReducer,
   type Book,
 } from './libraryReducer'
+import { loadBooks, saveBooks } from './persist'
 import './App.css'
 
 function availableCopies(b: Book): number {
@@ -11,11 +12,25 @@ function availableCopies(b: Book): number {
 }
 
 export default function App() {
-  const [state, dispatch] = useReducer(libraryReducer, initialLibraryState)
+  const [state, dispatch] = useReducer(
+    libraryReducer,
+    undefined,
+    () => createInitialState(loadBooks()),
+  )
   const [title, setTitle] = useState('')
   const [author, setAuthor] = useState('')
   const [copies, setCopies] = useState(1)
   const titleRef = useRef<HTMLInputElement>(null)
+
+  const [editing, setEditing] = useState<Book | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editAuthor, setEditAuthor] = useState('')
+  const [editTotal, setEditTotal] = useState(1)
+  const editDialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    saveBooks(state.books)
+  }, [state.books])
 
   useEffect(() => {
     if (!state.flash) return
@@ -24,6 +39,19 @@ export default function App() {
     }, 4000)
     return () => window.clearTimeout(t)
   }, [state.flash])
+
+  useEffect(() => {
+    const d = editDialogRef.current
+    if (!d) return
+    if (editing) {
+      setEditTitle(editing.title)
+      setEditAuthor(editing.author)
+      setEditTotal(editing.totalCopies)
+      if (!d.open) d.showModal()
+    } else if (d.open) {
+      d.close()
+    }
+  }, [editing])
 
   function onAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -34,15 +62,47 @@ export default function App() {
     titleRef.current?.focus()
   }
 
+  function openEdit(book: Book) {
+    setEditing(book)
+  }
+
+  function closeEdit() {
+    setEditing(null)
+  }
+
+  function onEditSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editing) return
+    dispatch({
+      type: 'EDIT_BOOK',
+      bookId: editing.id,
+      title: editTitle,
+      author: editAuthor,
+      totalCopies: editTotal,
+    })
+    closeEdit()
+  }
+
+  function onDelete(book: Book) {
+    const msg =
+      book.borrowed > 0
+        ? `Remove “${book.title}” and discard ${book.borrowed} borrowed count on record?`
+        : `Remove “${book.title}” from the catalog?`
+    if (window.confirm(msg)) {
+      dispatch({ type: 'DELETE_BOOK', bookId: book.id })
+    }
+  }
+
   return (
     <div className="layout">
       <header className="header">
         <div>
-          <p className="eyebrow">Frontend only · no server</p>
+          <p className="eyebrow">Frontend only · saved in this browser</p>
           <h1>Library desk</h1>
           <p className="lede">
-            Add titles to the shelf, borrow copies, and return them. State lives
-            in this browser tab until you refresh.
+            Add titles, borrow and return copies, edit rows, or remove them.
+            Data is stored in <strong>localStorage</strong> for this site
+            (multiple tabs: last save wins).
           </p>
         </div>
       </header>
@@ -175,6 +235,20 @@ export default function App() {
                         >
                           Return
                         </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => openEdit(book)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          onClick={() => onDelete(book)}
+                        >
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   )
@@ -184,6 +258,56 @@ export default function App() {
           </div>
         )}
       </section>
+
+      <dialog
+        ref={editDialogRef}
+        className="dialog"
+        onClose={() => setEditing(null)}
+      >
+        <form className="dialog-panel" onSubmit={onEditSave}>
+          <h2 className="dialog-title">Edit book</h2>
+          <div className="field">
+            <label htmlFor="edit-title">Title</label>
+            <input
+              id="edit-title"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="edit-author">Author</label>
+            <input
+              id="edit-author"
+              value={editAuthor}
+              onChange={(e) => setEditAuthor(e.target.value)}
+            />
+          </div>
+          <div className="field field-narrow">
+            <label htmlFor="edit-total">Total copies</label>
+            <input
+              id="edit-total"
+              type="number"
+              min={editing?.borrowed ?? 1}
+              step={1}
+              value={editTotal}
+              onChange={(e) => setEditTotal(Number(e.target.value))}
+            />
+            {editing ? (
+              <p className="field-hint">
+                Must be at least {editing.borrowed} (currently borrowed).
+              </p>
+            ) : null}
+          </div>
+          <div className="dialog-actions">
+            <button type="button" className="btn btn-ghost" onClick={closeEdit}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary">
+              Save changes
+            </button>
+          </div>
+        </form>
+      </dialog>
     </div>
   )
 }
